@@ -1,60 +1,68 @@
 import requests
 import pandas as pd
-from yfinance import ticker
-
-base_url = "https://laboratoriodefinancas.com/api/v2"
-token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzc3NTQ4MDkxLCJpYXQiOjE3NzQ5NTYwOTEsImp0aSI6IjY4OGUxYWVkZGFiNjQ1YjliMmUzMDgxMjliNDI0YzkyIiwidXNlcl9pZCI6IjExNyJ9.cDKVcsGJ8krkyEc5-UTNNMA6uefmEQH2dckZCP9QbUU"
-resp = requests.get(
-    f"{base_url}/bolsa/planilhao",
-    headers={"Authorization": f"Bearer {token}"},
-    params={"data_base": "2021-04-01"},
-)
-
-dados= resp.json()
-df= pd.DataFrame(dados)
-print(df.head())
-
-df2 = df[["ticker","roic","earning_yield"]]
-df2['rank_roic'] = df2["roic"].rank(ascending=False)
-df2['rank_p_ey'] = df2["earning_yield"].rank(ascending=False)
-df2["rank_final"] = (df2['rank_roic'] + df2['rank_p_ey'])
-df2.sort_values("rank_final", ascending=False)['ticker'][:20]
-
-#api para pegar o preço das ações
-base_url = "https://laboratoriodefinancas.com/api/v2"
-token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzc3NTQ4MDkxLCJpYXQiOjE3NzQ5NTYwOTEsImp0aSI6IjY4OGUxYWVkZGFiNjQ1YjliMmUzMDgxMjliNDI0YzkyIiwidXNlcl9pZCI6IjExNyJ9.cDKVcsGJ8krkyEc5-UTNNMA6uefmEQH2dckZCP9QbUU"
-params= {"tickers":"BBSE3","DATA_INI":"2021-04-01","DATA_FIM":"2026-03-26"}
-resp = requests.get(
-    f"{base_url}/PREÇO/CORRIGIDO",
-    headers={"Authorization": f"Bearer {token}"},
-    params=params,
-)
-
-df_preço = pd.DataFrame(resp.json())
-
-# Preço Final
-
-filtro1=df_preço["data"]=="2026-3-23"
-preço_final = df_preço.loc[filtro1,]
-preço_final= float(preço_final)
-
-#filtro inicial
-filtro2=df_preço["data"]=="2021-03-22"
-preço_inicial= df_preço.loc[filtro2,'fechamento'].iloc[0]
-preço_final/preço_inicial - 1
-
-#api
 import yfinance as yf
-#get ticker data
-ibov = yf.download("^BVSP", start="2001-01-01", end="2026-03-31")
-#preço Inicial
-filtro1 = ibov.index == "2001-01-01"
-preço_inicial = ibov.loc[filtro1, 'Adj Close'].iloc[0]
-#preço final
-filtro2=ibov[ibov.index == "2026-03-30"]
-ibov_fim = ibov.loc[filtro2, 'Adj Close'].iloc[0]
-#preço final
-filtro2 + ibov.index == "2026-03-30"
-ibov_fim = ibov [filtro2] ["close"].iloc[0]
-#retorno
-ibov_fim/preço_inicial - 1
+token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzc4MTUzNjQ1LCJpYXQiOjE3NzU1NjE2NDUsImp0aSI6IjdhNmQ1NzQyODY0NjQ4ODdiMDcxNzU3NzUzMDRhZDkzIiwidXNlcl9pZCI6IjExNyJ9.4O_WXBF-tfRDNN-58Uj_HrXCwcWdUvEUvBxFuwlmgXE"
+base_url = "https://laboratoriodefinancas.com/planilhao"
+
+headers = {"Authorization": f"Bearer {token}"}
+
+data_inicio="2021-04-01"
+data_fim = "2026-04-01"
+
+# 1. Pegar dados do 'Planilhão'
+resp = requests.get(f"{base_url}/bolsa/planilhao", headers=headers, params={"data_base": data_inicio})
+df = pd.DataFrame(resp.json())
+
+
+if not df.empty:
+    # Limpeza e Ranking (Removendo valores nulos para o rank funcionar)
+    df2 = df[["ticker", "roic", "earning_yield"]].dropna().copy()
+    df2['rank_roic'] = df2["roic"].rank(ascending=False)
+    df2['rank_ey'] = df2["earning_yield"].rank(ascending=False)
+    df2["rank_final"] = df2['rank_roic'] + df2['rank_ey']
+
+    # Pegamos as 5 melhores
+    top_5_df = df2.sort_values("rank_final").head(5)
+    lista_tickers = [f"{t}.SA" for t in top_5_df['ticker'].tolist()]
+
+
+print(f"Top 5 Ações em {data_inicio}: {lista_tickers}")
+
+
+    # 2. Cálculo de Performance
+retornos = []
+    
+    # Download em lote é mais rápido e estável
+    # group_by='column' ajuda a lidar com o MultiIndex do yfinance
+# O jeito certo:
+
+dados_hist = yf.download(lista_tickers, start="2021-04-01", end="2026-03-26")
+for ticker in lista_tickers:
+        try:
+            # Acessando Adj Close tratando o MultiIndex: dados_hist['Adj Close'][ticker]
+            # Usamos dropna() para garantir que pegamos o primeiro e último preço válido
+            serie_precos = dados_hist['Adj Close'][ticker].dropna()
+            
+            if not serie_precos.empty:
+                p_ini = serie_precos.iloc[0]
+                p_fim = serie_precos.iloc[-1]
+                performance = (p_fim / p_ini) - 1
+                retornos.append(performance)
+                print(f"{ticker}: {performance:.2%}")
+        except Exception as e:
+            print(f"Erro ao calcular {ticker}: {e}")
+
+    # Resultado Final
+    if retornos:
+        media_retorno_magic = sum(retornos) / len(retornos)
+        
+        # 3. Comparação com Ibovespa
+        ibov = yf.download("^BVSP", start=data_inicio, end=index=data_fim)['Adj Close']
+        ibov = ibov.dropna()
+        retorno_ibov = (ibov.iloc[-1] / ibov.iloc[0]) - 1
+
+        print("-" * 30)
+        print(f"Retorno Médio Magic Formula: {media_retorno_magic:.2%}")
+        print(f"Retorno Ibovespa: {retorno_ibov:.2%}")
+    else:
+        print("Nenhum dado de retorno foi coletado.")
